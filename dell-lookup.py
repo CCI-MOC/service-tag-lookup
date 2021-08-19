@@ -62,6 +62,9 @@ if __name__ == '__main__':
         reader = csv.reader(csv_file, delimiter=',')
         for row in reader:
             serial = row[0]
+            #serial = "2YN2RP2"  # testing
+            if len(serial) != 7:
+                continue  # not a dell part number
 
             driver.get("https://www.dell.com/support/home/en-us")
             field = wait_for_element_by_id('inpEntrySelection')
@@ -69,8 +72,11 @@ if __name__ == '__main__':
             btn = wait_for_element_by_id('txtSearchEs')
             btn.click()
 
-            link = wait_for_element_by_id('quicklink-sysconfig')
-            link.click()
+            try:
+                link = wait_for_element_by_id('quicklink-sysconfig')
+                link.click()
+            except:
+                continue
 
             ele = wait_for_element_by_id('systab_originalconfig')
 
@@ -92,6 +98,7 @@ if __name__ == '__main__':
 
             out_arr = {
                 'tag': serial,
+                'type': "",
                 'cpu': [],
                 'ram': [],
                 'storage': [],
@@ -154,15 +161,14 @@ if __name__ == '__main__':
 
                     # final array
                     out_arr['storage'].append(specs)
-                elif (re.search("intel", line, re.IGNORECASE) or re.search("amd", line, re.IGNORECASE)) and re.search("ghz", line, re.IGNORECASE):
+                elif (re.search("intel", line, re.IGNORECASE) or re.search("amd", line, re.IGNORECASE)) and re.search("c/", line, re.IGNORECASE):
                     #
                     # CPU
                     #
                     specs = {
                         'type': "",
                         'speed': "",
-                        'cores': "",
-                        'quantity': ""
+                        'cores': ""
                     }
 
                     # find type
@@ -170,31 +176,51 @@ if __name__ == '__main__':
                     if index == -1:
                         index = line.find("AMD")
 
-                    speed_index = line.find("GHz")
+                    #speed_index = line.find("GHz")
+                    speed_index = line.find(",", index)
+                    end_index = speed_index
+                    speed_index = line.rfind(" ", 0, speed_index)
+                    if line[speed_index + 1].isalpha():
+                        speed_index = line.rfind(" ", 0, speed_index)
+                    #step = 4
+                    #f_step = 4
+                    #if speed_index == -1:
+                    #    speed_index = line.find("G,")
+                    #    step = 3
+                    #    f_step = 1
+                    #    if speed_index == -1:
+                    #        speed_index = line.find("z,")  # dell doesn't have consistent spaces for some reason?
+                    #        step = 7
+                    #        f_step = 2
+
                     if index != -1:
                         start_index = index
-                        end_index = speed_index - 4
-                        specs['type'] = line[start_index:end_index]
+                        typeString = line[start_index:speed_index]
+                        dash_index = typeString.find("-")
+                        if dash_index != -1:
+                            space_index = dash_index + 1
+                            if typeString[space_index] == ' ':
+                                typeString = typeString[:space_index] + typeString[space_index + 1:]
+
+                    specs['type'] = typeString
 
                     # find speed
-                    start_index = speed_index - 3
-                    end_index = speed_index + 3
-                    specs['speed'] = line[start_index:end_index]
+                    start_index = speed_index
+                    specs['speed'] = line[start_index:end_index].replace(" ", "").replace(",", "")
 
                     # find core count
                     index = line.find("C/")
                     start_index = index - 2
-                    end_index = index + 4
-                    specs['cores'] = line[start_index:end_index]
-
-                    # find quantity
-                    quan_line = lines[id + 2]  # two lines down is the quantity
-                    start_index = quan_line.rfind(" ") + 1  # find space right before capacity
-                    specs['quantity'] = quan_line[start_index:]
+                    if not line[start_index].isdigit():
+                        start_index += 1
+                    end_index = index + 5
+                    if line[end_index - 1] == ' ':
+                        end_index = end_index + 1
+                    specs['cores'] = line[start_index:end_index].replace(" ", "").replace(",", "")
 
                     # final array
                     out_arr['cpu'].append(specs)
-                elif re.search("gb", line, re.IGNORECASE) and re.search("dimm", line, re.IGNORECASE) and line.count(' ') == 2:
+                elif re.search("gb", line, re.IGNORECASE) and (re.search("dimm", line, re.IGNORECASE) or re.search("memory module", line, re.IGNORECASE)):
                     #
                     # RAM
                     #
@@ -205,12 +231,15 @@ if __name__ == '__main__':
                     }
 
                     parts = line.split(" ")
-                    if len(parts) != 3:
+                    last_index = len(parts) - 1
+                    if not parts[last_index].isdigit():
                         continue
 
                     part_num = parts[0]
-                    desc = parts[1]
-                    specs['quantity'] = parts[2]
+                    specs['quantity'] = parts[last_index]
+                    del parts[0]
+                    del parts[last_index - 1]
+                    desc = " ".join(parts)
 
                     speclist = desc.split(",")
 
@@ -221,22 +250,30 @@ if __name__ == '__main__':
                             specs['type'] = item
 
                     out_arr['ram'].append(specs)
+                elif re.search("server", line, re.IGNORECASE) and re.search("poweredge", line, re.IGNORECASE):
+                    index = line.find("poweredge")
+                    start_index = line.rfind(":", 0, index) + 2  # find : right before
+                    end_index = line.find(" ", start_index + 10)
+                    out_arr['type'] = line[start_index:end_index]
 
+            print(out_arr)
             inventory.append(out_arr)
 
-    with open(args.output, 'w') as output_file:
+    with open(args.output, 'w', newline='') as output_file:
         writer = csv.writer(output_file)
-        header = ['service tag', 'cpu', 'gpu', 'ram', 'storage', 'network', 'psu']
+        header = ['service tag', 'type', 'cpu', 'gpu', 'ram', 'storage', 'network', 'psu']
         writer.writerow(header)
         for item in inventory:
             row = []
             row.append(item['tag'])  # add service tag to row
 
+            row.append(item['type'])  # add node type
+
             out_string = ""
             for cpu_item in item['cpu']:
                 if out_string != "":
                     out_string += " | "
-                out_string += cpu_item['quantity'] + "x " + cpu_item['type'] + " " + cpu_item['cores'] + " " + cpu_item['speed']
+                out_string += cpu_item['type'] + " " + cpu_item['cores'] + " " + cpu_item['speed']
             row.append(out_string)  # add CPU to row
 
             # GPU NOT YET IMPLEMENTED
