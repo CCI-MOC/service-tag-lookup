@@ -92,12 +92,12 @@ if __name__ == '__main__':
             lines = output.splitlines()
 
             out_arr = {
-                'CPU': [],
-                'GPU': [],
-                'RAM': [],
-                'Storage': [],
-                'Network': [],
-                'PSU': []
+                'cpu': [],
+                'gpu': [],
+                'ram': [],
+                'storage': [],
+                'network': [],
+                'psu': []
             }
 
             for id,line in enumerate(lines):
@@ -105,10 +105,12 @@ if __name__ == '__main__':
                     #
                     # STORAGE DEVICE
                     #
-                    capacity = ""
-                    type = ""
-                    connector = ""
-                    quantity = ""
+                    specs = {
+                        'capacity': "",
+                        'type': "",
+                        'connector': "",
+                        'quantity': ""
+                    }
 
                     # find capacity
                     index = line.find("GB")
@@ -118,39 +120,88 @@ if __name__ == '__main__':
                     if index != -1:
                         start_index = line.rfind(" ", 0, index) + 1  # find space right before capacity
                         end_index = index + 2  # two char 'GB' or 'TB'
-                        capacity = line[start_index:end_index]
+                        specs['capacity'] = line[start_index:end_index]
 
                     # find type
                     if re.search("solid state", line, re.IGNORECASE):
                         # ssd
                         if re.search("mix use", line, re.IGNORECASE):
-                            type = "Mix Use SSD"
+                            specs['type'] = "Mix Use SSD"
                         else:
-                            type = "SSD"
+                            specs['type'] = "SSD"
                     elif re.search("hard drive", line, re.IGNORECASE):
                         # hdd
                         index = line.find("RPM")
                         if index == -1:
-                            type = "HDD"
+                            specs['type'] = "HDD"
                         else:
                             start_index = line.rfind(" ", 0, index) + 1  # find space right before capacity
                             end_index = index + 3  # three char 'RPM'
                             rpm = line[start_index:end_index]
-                            type = rpm + " HDD"
+                            specs['type'] = rpm + " HDD"
 
                     # find connector
                     if re.search("sata", line, re.IGNORECASE):
                         # sata
-                        connector = "SATA"
+                        specs['connector'] = "SATA"
                     elif re.search("sas", line, re.IGNORECASE):
                         # sas
-                        connector = "SAS"
+                        specs['connector'] = "SAS"
 
                     # find quantity (need to expand dialog for this)
                     quan_line = lines[id + 2]  # two lines down is the quantity
                     start_index = quan_line.rfind(" ") + 1  # find space right before capacity
-                    quantity = quan_line[start_index:]
-                    print(quantity)
+                    specs['quantity'] = quan_line[start_index:]
+
+                    # final array
+                    out_arr['storage'].append(specs)
+                elif (re.search("intel", line, re.IGNORECASE) or re.search("amd", line, re.IGNORECASE)) and re.search("ghz", line, re.IGNORECASE):
+                    #
+                    # CPU
+                    #
+                    specs = {
+                        'type': "",
+                        'speed': "",
+                        'cores': "",
+                        'quantity': ""
+                    }
+
+                    # find type
+                    index = line.find("Intel")
+                    if index == -1:
+                        index = line.find("AMD")
+
+                    speed_index = line.find("GHz")
+                    if index != -1:
+                        start_index = index
+                        end_index = speed_index - 4
+                        specs['type'] = line[start_index:end_index]
+
+                    # find speed
+                    start_index = speed_index - 3
+                    end_index = speed_index + 3
+                    specs['speed'] = line[start_index:end_index]
+
+                    # find core count
+                    index = line.find("C/")
+                    start_index = index - 2
+                    end_index = index + 4
+                    specs['cores'] = line[start_index:end_index]
+
+                    # find quantity
+                    quan_line = lines[id + 2]  # two lines down is the quantity
+                    start_index = quan_line.rfind(" ") + 1  # find space right before capacity
+                    specs['quantity'] = quan_line[start_index:]
+
+                    # final array
+                    out_arr['cpu'].append(specs)
+                elif re.search("gb", line, re.IGNORECASE) and re.search("dimm", line, re.IGNORECASE):
+                    #
+                    # RAM
+                    #
+                    specs = {
+                        
+                    }
 
             exit()
 
