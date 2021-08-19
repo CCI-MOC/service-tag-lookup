@@ -1,5 +1,4 @@
 import logging
-import sys
 import time
 
 from selenium import webdriver
@@ -13,9 +12,7 @@ import re
 
 LOG = logging.getLogger(__name__)
 
-
 options = Options()
-
 
 def wait_for_element_by_xpath(expr, maxwait=10):
     start = time.time()
@@ -59,7 +56,9 @@ if __name__ == '__main__':
     options.add_experimental_option('excludeSwitches', ['enable-logging'])
     driver = webdriver.Chrome(options=options)  # needs to be in path
 
+    inventory = []
     with open(args.input) as csv_file:
+
         reader = csv.reader(csv_file, delimiter=',')
         for row in reader:
             serial = row[0]
@@ -92,8 +91,8 @@ if __name__ == '__main__':
             lines = output.splitlines()
 
             out_arr = {
+                'tag': serial,
                 'cpu': [],
-                'gpu': [],
                 'ram': [],
                 'storage': [],
                 'network': [],
@@ -195,14 +194,75 @@ if __name__ == '__main__':
 
                     # final array
                     out_arr['cpu'].append(specs)
-                elif re.search("gb", line, re.IGNORECASE) and re.search("dimm", line, re.IGNORECASE):
+                elif re.search("gb", line, re.IGNORECASE) and re.search("dimm", line, re.IGNORECASE) and line.count(' ') == 2:
                     #
                     # RAM
                     #
                     specs = {
-                        
+                        'capacity': "",
+                        'type': "",
+                        'quantity': ""
                     }
 
-            exit()
+                    parts = line.split(" ")
+                    if len(parts) != 3:
+                        continue
+
+                    part_num = parts[0]
+                    desc = parts[1]
+                    specs['quantity'] = parts[2]
+
+                    speclist = desc.split(",")
+
+                    for item in speclist:
+                        if "GB" in item:
+                            specs['capacity'] = item
+                        elif "DDR" in item:
+                            specs['type'] = item
+
+                    out_arr['ram'].append(specs)
+
+            inventory.append(out_arr)
+
+    with open(args.output, 'w') as output_file:
+        writer = csv.writer(output_file)
+        header = ['service tag', 'cpu', 'gpu', 'ram', 'storage', 'network', 'psu']
+        writer.writerow(header)
+        for item in inventory:
+            row = []
+            row.append(item['tag'])  # add service tag to row
+
+            out_string = ""
+            for cpu_item in item['cpu']:
+                if out_string != "":
+                    out_string += " | "
+                out_string += cpu_item['quantity'] + "x " + cpu_item['type'] + " " + cpu_item['cores'] + " " + cpu_item['speed']
+            row.append(out_string)  # add CPU to row
+
+            # GPU NOT YET IMPLEMENTED
+            row.append("")
+
+            out_string = ""
+            for ram_item in item['ram']:
+                if out_string != "":
+                    out_string += " | "
+                total_capacity = int(ram_item['capacity'][:ram_item['capacity'].find("GB")]) * int(ram_item['quantity'])
+                out_string = ram_item['quantity'] + "x " + ram_item['capacity'] + " " + ram_item['type'] + " Total: " + str(total_capacity) + "GB"
+            row.append(out_string)  # add RAM to row
+
+            out_string = ""
+            for storage_item in item['storage']:
+                if out_string != "":
+                    out_string += " | "
+                out_string = storage_item['quantity'] + "x " + storage_item['capacity'] + " " + storage_item['type'] + " " + storage_item['connector']
+            row.append(out_string)
+
+            # NETWORK NOT YET IMPLEMENTED
+            row.append("")
+
+            # PSU NOT YET IMPLEMENTED
+            row.append("")
+
+            writer.writerow(row)
 
     driver.close()
